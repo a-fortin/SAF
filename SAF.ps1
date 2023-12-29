@@ -11,28 +11,46 @@ Check active Directory for servers and then check Win32_Service for any service 
 service accounts on a table in C:\temp\report.html
 
 .INFO
-Version:        1.1.0
+Version:        1.2.0
 Author:         Antoine Fortin
 Co-Author:      Olivier Magny
-Date:           28/12/2023
+Date:           29/12/2023
 #>
 
-#
+#------------------------------------------------------[Request Elevatated Priviledge]-------------------------------------------
 if (-not (New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-# Prompt the user to elevate the script
 $arguments = "& '" + $myInvocation.MyCommand.Definition + "'"
 Start-Process powershell -Verb runAs -ArgumentList $arguments
 exit
 }
 
+#------------------------------------------------[Install RSAT ActiveDirectory if Needed]----------------------------------------
+
+$RSAT = Get-WindowsCapability -Name "Rsat.ActiveDirectory*" -Online 
+if (($RSAT.State) -eq "NotPresent") {
+    Write-Host "Installing Active Directory RSAT"
+    Get-WindowsCapability -Name "Rsat.ActiveDirectory*" -Online | Add-WindowsCapability -Online
+}
+
+#----------------------------------------------------------[Test ADWS port]------------------------------------------------------
+
+$DC = $Env:userdnsdomain
+if (([System.Net.Sockets.TcpClient]::new().ConnectAsync("$DC", 9389).Wait(100) -eq $false)) {
+Write-host "Unable to reach DC with Active Directory Web Services"
+Write-host "Check Firewall"
+Start-Sleep -Seconds 30
+exit
+}
+
 #---------------------------------------------------------[Retrive Servers in AD]------------------------------------------------
 Write-Host 'Fetchings Servers...'
-$Computers = Get-ADComputer -Filter {enabled -eq $true -and operatingsystem -like "*server*"} -properties *|select Name, DNSHostName, Enabled, Operatingsystem
+$Computers = Get-ADComputer -Filter {enabled -eq $true -and operatingsystem -like "*server*"} -properties Name, DNSHostName, Enabled, Operatingsystem |select Name, DNSHostName, Enabled, Operatingsystem
 
 #---------------------------------------------------------[Define String]--------------------------------------------------------
 $OnlineComputerNames = @()
 
 #---------------------------------------------------------[Test connectivity for each Servers]-----------------------------------
+Write-Host 'Testing Connection...'
 foreach ($Server in $Computers){
     $Hostname =$Server.DNSHostName
     $Pingtest = Test-Connection -ComputerName $Hostname -Quiet -Count 1 -ErrorAction SilentlyContinue
@@ -62,6 +80,7 @@ $HTML = @"
 
 #---------------------------------------------------------[Define the report file path]------------------------------------------
 $Report = "C:\temp\report.html"
+if ((Test-Path -Path $Report) -eq $false) {New-Item $Report -Force} 
 Clear-Content -Path "$Report"
 
 
@@ -70,11 +89,12 @@ Write-Host 'Generating Report...'
 ForEach ($SRV in $OnlineComputerNames) {
     $Services = Get-WmiObject -ComputerName $SRV -Class Win32_Service -ErrorAction SilentlyContinue | Where-Object {
         $_.StartName -notin @("LocalSystem", "NT AUTHORITY\NetworkService", "NT AUTHORITY\Network Service", "NT AUTHORITY\LocalService", "NT AUTHORITY\Local Service", $null)}
-    if ($Services.Count -gt 0) {
-    $Services | Sort | Select-Object -Property StartName, Name, DisplayName | ConvertTo-Html -Property StartName, Name, DisplayName -Head $HTML -Body "<H2>$SRV</H2>" | Out-File -Append -FilePath $Report
+        if ($Services.Count -gt 0) {
+        $Services | Sort | Select-Object -Property StartName, Name, DisplayName | ConvertTo-Html -Property StartName, Name, DisplayName -Head $HTML -Body "<H2>$SRV</H2>" | Out-File -Append -FilePath $Report
     }
 }
 
 #---------------------------------------------------------[Open the report]------------------------------------------------------
 Invoke-Item $Report
 Write-Host @("Report Generated. location $Report")
+Start-Sleep -Seconds 15
