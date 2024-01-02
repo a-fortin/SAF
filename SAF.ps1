@@ -11,58 +11,75 @@ Check active Directory for servers and then check Win32_Service for any service 
 service accounts on a table in C:\temp\report.html
 
 .INFO
-Version:        1.2.0
+Version:        1.3.0
 Author:         Antoine Fortin
 Co-Author:      Olivier Magny
-Date:           29/12/2023
+Date:           02/01/2024
 #>
 
+#-------------------------------------------------------[Progress bar]----------------------------------------------------------
+$Counter = 0
+$OnlineComputersCNT = 0
+$ComputersCNT = 0
+Write-Progress -Id 1 -Activity "Starting Script" -PercentComplete $Counter
+
 #------------------------------------------------------[Request Elevatated Priviledge]-------------------------------------------
+Write-Progress -Id 1 -Activity "Check Elevatated Priviledge" -Status "Checking..." -PercentComplete $Counter
 if (-not (New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
 $arguments = "& '" + $myInvocation.MyCommand.Definition + "'"
 Start-Process powershell -Verb runAs -ArgumentList $arguments
 exit
 }
 
+$Counter += 10
 #------------------------------------------------[Install RSAT ActiveDirectory if Needed]----------------------------------------
-
+Write-Progress -Id 1 -Activity "Active Directory RSAT" -Status "Checking..." -PercentComplete $Counter
 $RSAT = Get-WindowsCapability -Name "Rsat.ActiveDirectory*" -Online 
 if (($RSAT.State) -eq "NotPresent") {
-    Write-Host "Installing Active Directory RSAT"
+    Write-Progress -Id 1 -Activity "Active Directory RSAT" -Status "Installing..." -PercentComplete $Counter
     Get-WindowsCapability -Name "Rsat.ActiveDirectory*" -Online | Add-WindowsCapability -Online
 }
 
+$Counter += 10
 #----------------------------------------------------------[Test ADWS port]------------------------------------------------------
-
+Write-Progress -Id 1 -Activity "Test ADWS port" -Status "Checking..." -PercentComplete $Counter
 $DC = $Env:userdnsdomain
 if (([System.Net.Sockets.TcpClient]::new().ConnectAsync("$DC", 9389).Wait(100) -eq $false)) {
 Write-host "Unable to reach DC with Active Directory Web Services"
 Write-host "Check Firewall"
-Start-Sleep -Seconds 30
+Start-Sleep -Seconds 15
 exit
 }
 
+$Counter += 10
 #---------------------------------------------------------[Retrive Servers in AD]------------------------------------------------
+Write-Progress -Id 1 -Activity "Retrive Servers in Active Directory" -Status "Checking..." -PercentComplete $Counter
 Write-Host 'Fetchings Servers...'
 $Computers = Get-ADComputer -Filter {enabled -eq $true -and operatingsystem -like "*server*"} -properties Name, DNSHostName, Enabled, Operatingsystem |select Name, DNSHostName, Enabled, Operatingsystem
 
+$Counter += 10
 #---------------------------------------------------------[Define String]--------------------------------------------------------
-$OnlineComputerNames = @()
+$OnlineComputersNames = @()
+$ComputersCNT = (30/($Computers.Count))
 
 #---------------------------------------------------------[Test connectivity for each Servers]-----------------------------------
+Write-Progress -Id 1 -Activity "Test Connection" -PercentComplete $Counter
 Write-Host 'Testing Connection...'
 foreach ($Server in $Computers){
     $Hostname =$Server.DNSHostName
+    Write-Progress -Id 1 -Activity "Test Connection" -Status "$Hostname" -PercentComplete $Counter
+    $Counter += $ComputersCNT
     $Pingtest = Test-Connection -ComputerName $Hostname -Quiet -Count 1 -ErrorAction SilentlyContinue
     if($Pingtest){
-        $OnlineComputerNames += $Server.Name
-     } 
+        $OnlineComputersNames += $Server.Name
+     }
 }
 
+$OnlineComputersCNT = (30/($OnlineComputersNames.count))
 #---------------------------------------------------------[Display values]-------------------------------------------------------
 
 Write-Host 'Servers Fetched :'
-$OnlineComputerNames = $OnlineComputerNames|Sort
+$OnlineComputerNames = $OnlineComputersNames|Sort
 Write-Host $OnlineComputerNames
 
 #---------------------------------------------------------[HTML content]---------------------------------------------------------
@@ -83,10 +100,10 @@ $Report = "C:\temp\report.html"
 if ((Test-Path -Path $Report) -eq $false) {New-Item $Report -Force} 
 Clear-Content -Path "$Report"
 
-
 #---------------------------------------------------------[Loop through each computer]-------------------------------------------
-Write-Host 'Generating Report...'
-ForEach ($SRV in $OnlineComputerNames) {
+ForEach ($SRV in $OnlineComputersNames) {
+    Write-Progress -Id 1 -Activity "Generating Report" -Status "$SRV" -PercentComplete $Counter
+    $Counter += $OnlineComputersCNT
     $Services = Get-WmiObject -ComputerName $SRV -Class Win32_Service -ErrorAction SilentlyContinue | Where-Object {
         $_.StartName -notin @("LocalSystem", "NT AUTHORITY\NetworkService", "NT AUTHORITY\Network Service", "NT AUTHORITY\LocalService", "NT AUTHORITY\Local Service", $null)}
         if ($Services.Count -gt 0) {
@@ -95,6 +112,8 @@ ForEach ($SRV in $OnlineComputerNames) {
 }
 
 #---------------------------------------------------------[Open the report]------------------------------------------------------
+Write-Progress -Activity "Report Generated" -Completed
 Invoke-Item $Report
 Write-Host @("Report Generated. location $Report")
 Start-Sleep -Seconds 15
+
