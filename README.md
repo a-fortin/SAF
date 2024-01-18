@@ -30,7 +30,7 @@ I --> K{Report}
 H --> J[Query online servers tasks]
 J ---> N[Loop]
 N ---> H
-H ---> L[If exist, add to report]
+H ---> L[If exist, add to the report]
 J ---> L
 L --> K
 N --> O[When done, invoke report]

@@ -11,7 +11,7 @@ Check active Directory for servers and then check Win32_Services for any service
 service accounts and scheduled tasks on a table in C:\temp\report.html
 
 .INFO
-Version:        2.0.0
+Version:        2.0.1
 Author:         Antoine Fortin
 Co-Author:      Olivier Magny
 Date:           18/01/2024
@@ -23,7 +23,7 @@ $OnlineComputersCNT = 0
 $ComputersCNT = 0
 Write-Progress -Id 1 -Activity "Starting Script" -PercentComplete $Counter
 
-#------------------------------------------------------[Request Elevatated Priviledge]-------------------------------------------
+#------------------------------------------------------[Request Elevatated Privilege]-------------------------------------------
 Write-Progress -Id 1 -Activity "Check Elevatated Priviledge" -Status "Checking..." -PercentComplete $Counter
 if (-not (New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
 $arguments = "& '" + $myInvocation.MyCommand.Definition + "'"
