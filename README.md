@@ -1,8 +1,38 @@
-# SAF
+# SAF - Service Account Finder
 
-_(Service Account Finder)_
+This PowerShell script fetch servers on Active Directory and remotely check service and scheduled task for any uncommon accounts. The goal of this script is to make a html report to help system administrators to find any  where service accounts are use in their Windows server infrastructure.
 
+## Disclaimer 
+This script is provided as-is without any warranties. Use it at your own risk.
 
-Powershell script that fetch servers on Active directory and check service accounts on them
+## Prerequisites
+- PowerShell execution policy allows running scripts
+- Run PowerShell with administrative privileges
+- Domain Administrator access
+- RSAT: Active Directory Domain Services and Lightweight Directory Services Tools
+- Active Directory Web Services (ADWS) access to servers
+- Windows Remote Management (WinRM) access to servers
 
-![garfield](https://images-wixmp-ed30a86b8c4ca887773594c2.wixmp.com/f/b83b50b0-82ba-455b-ae08-75898f22d236/dd7yjc9-7bdcde0d-c99e-4ee3-ad3e-a5718c54828d.png?token=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1cm46YXBwOjdlMGQxODg5ODIyNjQzNzNhNWYwZDQxNWVhMGQyNmUwIiwiaXNzIjoidXJuOmFwcDo3ZTBkMTg4OTgyMjY0MzczYTVmMGQ0MTVlYTBkMjZlMCIsIm9iaiI6W1t7InBhdGgiOiJcL2ZcL2I4M2I1MGIwLTgyYmEtNDU1Yi1hZTA4LTc1ODk4ZjIyZDIzNlwvZGQ3eWpjOS03YmRjZGUwZC1jOTllLTRlZTMtYWQzZS1hNTcxOGM1NDgyOGQucG5nIn1dXSwiYXVkIjpbInVybjpzZXJ2aWNlOmZpbGUuZG93bmxvYWQiXX0.M6ZZpDAX_dMnTp_iZ8d4qsgHDHSoX925m2xVJJPOlpU)
+## Script workflow
+
+```mermaid
+graph TD
+A[Check Privilege] --> B[Check AD RSAT]
+B[Check AD RSAT] --> C[Install if not present]
+B --> D[Check ADWS to DC]
+C --> D
+D --> E[Retrive servers]
+D --> F[if unreachable, close script]
+E --> G[Check servers connection]
+I --> H[Query online servers services]
+G --> I[Create and clear report]
+I --> K{Report}
+H --> J[Query online servers tasks]
+J ---> N[Loop]
+N ---> H
+H ---> L[If exist, add to report]
+J ---> L
+L --> K
+N --> O[When done, invoke report]
+O --> K
+```
