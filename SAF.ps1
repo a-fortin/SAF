@@ -5,16 +5,16 @@ Service Account Finder (SAF)
 .DESCRIPTION
 This Script is based and inspired on Phil Robeson philrobeson@yahoo.com
 (https://www.reddit.com/r/sysadmin/comments/c7m821/finding_where_an_ad_service_account_is_being_used/)
-Check active Directory for servers and then check Win32_Services for any service account and scheduled tasks. create a html report.
+Examine the Active Directory for servers, and subsequently, inspect Win32_Services and scheduled tasks for any service accounts . Generate an HTML report based on the findings.
 
 .OUTPUTS
-service accounts and scheduled tasks on a table in C:\temp\report.html
+Services and scheduled tasks accounts will be presented in a table within the file located at C:\temp\report.html.
 
 .INFO
-Version:        2.0.1
+Version:        2.1.0
 Author:         Antoine Fortin
 Co-Author:      Olivier Magny
-Date:           18/01/2024
+Date:           22/01/2024
 #>
 
 #-------------------------------------------------------[Progress bar]----------------------------------------------------------
@@ -26,9 +26,9 @@ Write-Progress -Id 1 -Activity "Starting Script" -PercentComplete $Counter
 #------------------------------------------------------[Request Elevatated Privilege]-------------------------------------------
 Write-Progress -Id 1 -Activity "Check Elevatated Priviledge" -Status "Checking..." -PercentComplete $Counter
 if (-not (New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-$arguments = "& '" + $myInvocation.MyCommand.Definition + "'"
-Start-Process powershell -Verb runAs -ArgumentList $arguments
-exit
+    $arguments = "& '" + $myInvocation.MyCommand.Definition + "'"
+    Start-Process powershell -Verb runAs -ArgumentList $arguments
+    exit
 }
 
 $Counter += 10
@@ -45,10 +45,10 @@ $Counter += 10
 Write-Progress -Id 1 -Activity "Test ADWS port" -Status "Checking..." -PercentComplete $Counter
 $DC = $Env:userdnsdomain
 if (([System.Net.Sockets.TcpClient]::new().ConnectAsync("$DC", 9389).Wait(100) -eq $false)) {
-Write-host "Unable to reach DC with Active Directory Web Services"
-Write-host "Check Firewall"
-Start-Sleep -Seconds 15
-exit
+    Write-host "Unable to reach DC with Active Directory Web Services"
+    Write-host "Check Firewall"
+    Start-Sleep -Seconds 15
+    exit
 }
 
 $Counter += 10
@@ -112,37 +112,40 @@ if ($OnlineComputer.WinRM -eq $True -le 0) {
 
 #---------------------------------------------------------[Loop through each computer]-------------------------------------------
 ForEach ($OnlineComputer in $OnlineComputers) {
-    if ($OnlineComputer.WinRM -eq $True) {
-        Write-Progress -Id 1 -Activity "Generating Report" -Status $OnlineComputer.Name -PercentComplete $Counter -CurrentOperation "Services"
+    
+    Write-Progress -Id 1 -Activity "Generating Report" -Status $OnlineComputer.Name -PercentComplete $Counter -CurrentOperation "Services"
         
-        $Services = Get-WmiObject -ComputerName "SVCAPPDEV.prosol.ca" -Class Win32_Service -ErrorAction SilentlyContinue | Where-Object {
-            $_.StartName -notin @("LocalSystem", "NT AUTHORITY\NetworkService", "NT AUTHORITY\Network Service", "NT AUTHORITY\LocalService", "NT AUTHORITY\Local Service", $null)
-        }
+    $Services = Get-WmiObject -ComputerName $OnlineComputer.Name -Class Win32_Service -ErrorAction SilentlyContinue | Where-Object {
+        $_.StartName -notin @("LocalSystem", "NT AUTHORITY\NetworkService", "NT AUTHORITY\Network Service", "NT AUTHORITY\LocalService", "NT AUTHORITY\Local Service", $null)
+    }
         
-        if ($Services.Count -gt 0) {
-            $Services | Sort-Object | Select-Object -Property StartName, Name, DisplayName | ConvertTo-Html -Property StartName, Name, DisplayName -Head $HTML -Body "<H2>$($OnlineComputer.Name)</H2>" -PreContent "<h3>Services</h3>" | Out-File -Append -FilePath $Report
-        }
+    if ($Services.Count -gt 0) {
+        $Services | Sort-Object | Select-Object -Property StartName, Name, DisplayName | ConvertTo-Html -Property StartName, Name, DisplayName -Head $HTML -Body "<H2>$($OnlineComputer.Name)</H2>" -PreContent "<h3>Services</h3>" | Out-File -Append -FilePath $Report
+    }
         
-        $Counter += ($OnlineComputersCNT/2)
+    $Counter += ($OnlineComputersCNT/2)
 
+    if ($OnlineComputer.WinRM -eq $True) {
+    
         Write-Progress -Id 1 -Activity "Generating Report" -Status $OnlineComputer.Name -PercentComplete $Counter -CurrentOperation "Scheduled Tasks"
 
         $Tasks = Get-ScheduledTask -CimSession $OnlineComputer.Name -ErrorAction SilentlyContinue | Select-Object pscomputername,TaskName, @{Name="RunAs";Expression={ $_.principal.userid }},state | Where-Object {
-            $_.RunAs -notin @("SYSTEM", "LOCAL SERVICE", "NETWORK SERVICE", "", $null) -and 
+            $_.RunAs -notin @("SYSTEM", "LOCAL SERVICE", "NETWORK SERVICE", "", $null)<# -and 
             $_.TaskName -notlike @("*Optimize Start Menu*") -and 
-            $_.TaskName -notlike @("*User_Feed_Synchronization*")
+            $_.TaskName -notlike @("*User_Feed_Synchronization*")#>
         }
-        
-        if ($Services.Count -le 0 -and $Tasks.Count -gt 0) {
-                    ConvertTo-Html -Body "<H2>$($OnlineComputer.Name)</H2>" | Out-File -Append -FilePath $Report
-        }    
-        
         if ($Tasks.Count -gt 0) {
-            $Tasks | Sort-Object  | Select-Object -Property pscomputername,TaskName,RunAs,state | ConvertTo-Html -Property pscomputername,TaskName,RunAs,state -Head $HTML -PreContent "<h3>Tasks</h3>"  | Out-File -Append -FilePath $Report
+            if ($Services.Count -le 0) {
+                ConvertTo-Html -Body "<H2>$($OnlineComputer.Name)</H2>" | Out-File -Append -FilePath $Report
+            }    
+        
+            if ($Tasks.Count -gt 0) {
+                $Tasks | Sort-Object  | Select-Object -Property pscomputername,TaskName,RunAs,state | Where-Object {$_.state -eq "Ready"} | ConvertTo-Html -Property pscomputername,TaskName,RunAs,state -Head $HTML -PreContent "<h3>Tasks</h3>"  | Out-File -Append -FilePath $Report
+            }
         }
-
-        $Counter += ($OnlineComputersCNT/2)
-    }      
+    }
+          
+    $Counter += ($OnlineComputersCNT/2)
 }
 
 #---------------------------------------------------------[Open the report]------------------------------------------------------

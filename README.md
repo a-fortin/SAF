@@ -1,6 +1,6 @@
 # SAF - Service Account Finder
 
-This PowerShell script fetch servers on Active Directory and remotely check service and scheduled task for any uncommon accounts. The goal of this script is to make a html report to help system administrators to find any  where service accounts are use in their Windows server infrastructure.
+This PowerShell script fetch servers on Active Directory  and remotely examines services and scheduled tasks for any unusual accounts. The objective of this script is to generate an HTML report that assists system administrators in identifying instances where service accounts are employed within their Windows server infrastructure.
 
 ## Disclaimer 
 This script is provided as-is without any warranties. Use it at your own risk.
